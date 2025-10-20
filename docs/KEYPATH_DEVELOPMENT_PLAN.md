@@ -1,6 +1,6 @@
 # SwiftUI‑like KeyPath in Iced — Step‑by‑Step Development Plan
 
-This document is a concrete, incremental development plan to introduce a SwiftUI‑style KeyPath API to Iced. It complements, but does not duplicate, the integration guide in `RUST_KEY_PATHS.md`.
+This document is a concrete, incremental development plan to introduce a SwiftUI‑style KeyPath API to Iced using the `rust-key-paths` crate. It complements, but does not duplicate, the integration guide in `RUST_KEY_PATHS.md`.
 
 - Goal: Ergonomic, typed paths into app state for identity, selection, and updates
 - Target feel: SwiftUI `\AppState.user.name` mapped to Rust `kp!(AppState, user.name)`
@@ -9,6 +9,22 @@ This document is a concrete, incremental development plan to introduce a SwiftUI
 See also: `RUST_KEY_PATHS.md` for integration points and code examples.
 
 ---
+
+## Crate dependency (rust-key-paths)
+
+Add the crate to the crates that will use key paths (generally `core`, `selector`, `runtime`, and any examples that opt in):
+
+```toml
+# Cargo.toml
+[dependencies]
+rust-key-paths = "*"   # use the latest published version
+```
+
+And import when needed:
+
+```rust
+use rust_key_paths::{kp, KeyPath, KeyPathExt, KeyPathHash};
+```
 
 ## High‑level milestones
 
@@ -57,9 +73,9 @@ let email = kp!(AppState, user.profile.email).get(state).clone();
 ## Detailed plan (step‑by‑step)
 
 ### 0) Design decisions (short RFC)
-- Choose whether to adopt an external crate (e.g., `keypath`, `lens-rs`) or a small internal `KeyPath` trait + proc macro.
-- Decide on a stable textual description for hashing (e.g., `"AppState.user.profile.email"`).
-- Define the feature flag name: `keypath`.
+- Adopt `rust-key-paths` for the `KeyPath` trait, `kp!` macro, and helpers.
+- Confirm the crate’s stable textual descriptor for hashing (e.g., `"AppState.user.profile.email"`).
+- Define the feature flag name in Iced: `keypath` (to gate the integration points).
 
 Deliverable: short ADR in `docs/` linking to this plan.
 
@@ -70,9 +86,9 @@ Deliverable: short ADR in `docs/` linking to this plan.
   - `core/` (new module `core/src/widget/keypath.rs` or inside `core/src/widget/id.rs`)
   - Root proc‑macro crate (if needed) or add dependency on chosen key‑path crate
 - Work:
-  - Introduce `KeyPath<T>` trait (or re‑export from dependency) and `KeyPathExt` with `get`, `set`, `modify` helpers.
-  - Implement `id_from_key_path<T>(kp: impl KeyPath<T>) -> widget::Id` using a stable 64‑bit hash of the key path description.
-  - Add `kp!(Root, a.b.c)` proc macro (or re‑export) and `id!(Root, a.b.c)` macro that expands to `id_from_key_path(kp!(Root, a.b.c))`.
+  - Re‑export `KeyPath<T>`, `KeyPathExt`, and `kp!` from `rust-key-paths` in appropriate modules for ergonomics.
+  - Implement `id_from_key_path<T>(kp: impl KeyPath<T>) -> widget::Id` using `KeyPathHash::stable_hash64()` from `rust-key-paths`.
+  - Provide an `id!(Root, a.b.c)` macro that expands to `id_from_key_path(kp!(Root, a.b.c))`.
   - Gate the new API behind `#[cfg(feature = "keypath")]`.
 
 Acceptance criteria:
@@ -152,6 +168,8 @@ Acceptance criteria:
 ## API sketches (illustrative)
 
 ```rust
+use rust_key_paths::{kp, KeyPath, KeyPathHash};
+
 // In core
 #[cfg(feature = "keypath")]
 pub fn id_from_key_path<T>(kp: impl KeyPath<T>) -> Id { Id::from_u64(kp.stable_hash64()) }
